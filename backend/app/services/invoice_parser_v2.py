@@ -17,10 +17,14 @@ class InvoiceParserV2:
     @classmethod
     def parse_file(cls, file_path: str, mime_type: Optional[str] = None) -> Dict[str, Any]:
         text = cls._extract_pdf_text(file_path) if Path(file_path).suffix.lower() == ".pdf" else ""
+        logger.info("BALLENOIL_DEBUG text_length=%s", len(text or ""))
+        logger.info("BALLENOIL_DEBUG text_head=%s", (text or "")[:500])
+        logger.info("BALLENOIL_DEBUG text_tail=%s", (text or "")[-500:])
         if not text:
             parsed = cls.parse_text("")
             parsed["warnings"].append("No se pudo extraer texto del archivo.")
             parsed["needs_review"] = True
+            parsed["extracted_text"] = ""
             return parsed
         return cls.parse_text(text)
 
@@ -56,6 +60,7 @@ class InvoiceParserV2:
                 }
             )
 
+        result["extracted_text"] = (text or "")[:20000]
         cls._add_compat_aliases(result)
         return result
 

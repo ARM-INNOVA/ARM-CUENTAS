@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -13,7 +13,7 @@ class Provider(Base):
     telefono = Column(String)
     direccion = Column(String)
     tipo = Column(String)  # "proveedor" o "cliente"
-    activo = Column(Integer, default=1)
+    activo = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
