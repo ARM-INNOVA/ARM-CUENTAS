@@ -12,7 +12,7 @@ PyPDF2==3.0.1
 pdfplumber==0.10.3
 pytesseract==0.3.10
 pillow==10.1.0
-openpyxl==3.21.2
+openpyxl==3.1.5
 python-multipart==0.0.6
 aiofiles==23.2.1
 boto3==1.29.7
