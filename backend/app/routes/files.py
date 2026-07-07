@@ -7,7 +7,7 @@ from app.models.file import File as FileModel
 from app.models.movement import Movement
 from app.schemas.file import FileResponse, ExtractedDataResponse, FileAttachRequest, InvoiceReviewRequest
 from app.utils.files import allowed_file, sanitize_filename, generate_safe_filename, ensure_upload_dir
-from app.services.invoice_parser import InvoiceParser
+from app.services.invoice_parser_v2 import InvoiceParser
 from app.services.movement_service import MovementService
 from app.config import settings
 import os
