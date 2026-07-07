@@ -2,9 +2,11 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
+const authDisabled = import.meta.env.VITE_AUTH_DISABLED === 'true'
+
 export const Navbar = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   
   return (
     <nav className="bg-red-600 text-white shadow-lg">
@@ -16,7 +18,16 @@ export const Navbar = () => {
           
           <div className="flex items-center space-x-4">
             <span className="text-sm">{user?.full_name || user?.username}</span>
-            <span className="px-4 py-2 bg-red-700 rounded text-sm">Sin login</span>
+            {authDisabled ? (
+              <span className="px-4 py-2 bg-red-700 rounded text-sm">Acceso temporal</span>
+            ) : (
+              <button
+                onClick={logout}
+                className="px-4 py-2 bg-red-700 hover:bg-red-800 rounded text-sm transition"
+              >
+                Logout
+              </button>
+            )}
           </div>
         </div>
       </div>

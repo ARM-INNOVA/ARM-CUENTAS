@@ -7,10 +7,12 @@ const guestUser = {
   role: 'admin',
 }
 
+const authDisabled = import.meta.env.VITE_AUTH_DISABLED === 'true'
+
 export const useAuthStore = create((set) => ({
-  user: guestUser,
+  user: authDisabled ? guestUser : null,
   token: null,
-  isAuthenticated: true,
+  isAuthenticated: authDisabled,
   
   login: (user, token) => set({
     user,
@@ -19,12 +21,21 @@ export const useAuthStore = create((set) => ({
   }),
   
   logout: () => set({
-    user: guestUser,
+    user: authDisabled ? guestUser : null,
     token: null,
-    isAuthenticated: true
+    isAuthenticated: authDisabled
   }),
   
   loadFromStorage: () => {
+    if (authDisabled) {
+      set({
+        token: null,
+        user: guestUser,
+        isAuthenticated: true
+      })
+      return
+    }
+
     const token = localStorage.getItem('token')
     const user = localStorage.getItem('user')
     
@@ -37,11 +48,7 @@ export const useAuthStore = create((set) => ({
       return
     }
 
-    set({
-      token: null,
-      user: guestUser,
-      isAuthenticated: true
-    })
+    set({ user: null, token: null, isAuthenticated: false })
   }
 }))
 

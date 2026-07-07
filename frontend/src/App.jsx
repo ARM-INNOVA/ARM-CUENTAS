@@ -1,9 +1,26 @@
 import React, { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './hooks/useStore'
+import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import UploadInvoicePage from './pages/UploadInvoicePage'
 import './styles/globals.css'
+
+const authDisabled = import.meta.env.VITE_AUTH_DISABLED === 'true'
+
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated } = useAuthStore()
+
+  if (authDisabled) {
+    return children
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return children
+}
 
 export default function App() {
   const loadFromStorage = useAuthStore(state => state.loadFromStorage)
@@ -15,9 +32,23 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/upload" element={<UploadInvoicePage />} />
+        <Route path="/login" element={authDisabled ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/upload"
+          element={
+            <ProtectedRoute>
+              <UploadInvoicePage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>

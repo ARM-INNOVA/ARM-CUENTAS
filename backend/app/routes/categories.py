@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.middleware.auth import get_current_user, require_roles
+from app.models.user import User, UserRole
 from app.models.category import Category
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.services.category_service import CategoryService
@@ -8,11 +10,10 @@ from typing import List
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
-# TODO: Agregar dependencia de autenticación
-
 @router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_category(
     category: CategoryCreate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
     """Crear nueva categoría"""
@@ -22,6 +23,7 @@ async def create_category(
 @router.get("/{category_id}", response_model=CategoryResponse)
 async def get_category(
     category_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Obtener categoría"""
@@ -33,6 +35,7 @@ async def get_category(
 @router.get("/", response_model=List[CategoryResponse])
 async def list_categories(
     activas_only: bool = True,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Listar categorías"""
@@ -43,6 +46,7 @@ async def list_categories(
 async def update_category(
     category_id: int,
     category_update: CategoryUpdate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
     """Actualizar categoría"""
@@ -54,6 +58,7 @@ async def update_category(
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_category(
     category_id: int,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
     """Eliminar categoría"""

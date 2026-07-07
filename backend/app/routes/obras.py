@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.middleware.auth import get_current_user, require_roles
+from app.models.user import User, UserRole
 from app.models.obra import Obra, ObraStatus
 from app.schemas.obra import ObraCreate, ObraUpdate, ObraResponse, ObraDetailResponse
 from app.services.movement_service import MovementService
@@ -8,10 +10,12 @@ from typing import List
 
 router = APIRouter(prefix="/api/obras", tags=["obras"])
 
-# TODO: Agregar dependencia de autenticación
-
 @router.post("/", response_model=ObraResponse, status_code=status.HTTP_201_CREATED)
-async def create_obra(obra: ObraCreate, db: Session = Depends(get_db)):
+async def create_obra(
+    obra: ObraCreate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
     """Crear nueva obra"""
     new_obra = Obra(**obra.dict())
     db.add(new_obra)
@@ -20,7 +24,11 @@ async def create_obra(obra: ObraCreate, db: Session = Depends(get_db)):
     return ObraResponse.from_orm(new_obra)
 
 @router.get("/{obra_id}", response_model=ObraDetailResponse)
-async def get_obra(obra_id: int, db: Session = Depends(get_db)):
+async def get_obra(
+    obra_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Obtener detalles de una obra"""
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
@@ -38,6 +46,7 @@ async def get_obra(obra_id: int, db: Session = Depends(get_db)):
 @router.get("/", response_model=List[ObraResponse])
 async def list_obras(
     estado: str = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Listar obras"""
@@ -55,6 +64,7 @@ async def list_obras(
 async def update_obra(
     obra_id: int,
     obra_update: ObraUpdate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
     """Actualizar obra"""
@@ -72,7 +82,11 @@ async def update_obra(
     return ObraResponse.from_orm(obra)
 
 @router.delete("/{obra_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_obra(obra_id: int, db: Session = Depends(get_db)):
+async def delete_obra(
+    obra_id: int,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
     """Eliminar obra"""
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:

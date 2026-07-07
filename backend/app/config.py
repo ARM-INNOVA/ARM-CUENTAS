@@ -48,6 +48,7 @@ class Settings:
     APP_NAME: str = "ARM CUENTAS"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+    AUTH_DISABLED: bool = os.getenv("AUTH_DISABLED", "False").lower() == "true"
     
     # OCR
     USE_OCR: bool = os.getenv("USE_OCR", "True").lower() == "true"

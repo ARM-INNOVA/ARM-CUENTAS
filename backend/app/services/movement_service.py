@@ -2,6 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.movement import Movement
 from app.models.obra import Obra
+from app.models.user import User
 from app.schemas.movement import MovementCreate, MovementUpdate, MovementResponse
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -9,6 +10,11 @@ from typing import List, Optional, Dict, Any
 
 class MovementService:
     """Servicio de movimientos"""
+
+    @staticmethod
+    def _is_admin(user: User) -> bool:
+        role = user.role.value if hasattr(user.role, "value") else str(user.role)
+        return role == "admin"
     
     @staticmethod
     def create_movement(db: Session, movement_create: MovementCreate, user_id: int) -> Movement:
@@ -23,12 +29,14 @@ class MovementService:
         return movement
     
     @staticmethod
-    def get_movement(db: Session, movement_id: int, user_id: int) -> Movement:
+    def get_movement(db: Session, movement_id: int, current_user: User) -> Movement:
         """Obtener movimiento"""
-        movement = db.query(Movement).filter(
-            Movement.id == movement_id,
-            Movement.user_id == user_id
-        ).first()
+        query = db.query(Movement).filter(Movement.id == movement_id)
+
+        if not MovementService._is_admin(current_user):
+            query = query.filter(Movement.user_id == current_user.id)
+
+        movement = query.first()
         
         if not movement:
             raise HTTPException(status_code=404, detail="Movimiento no encontrado")
@@ -36,9 +44,9 @@ class MovementService:
         return movement
     
     @staticmethod
-    def update_movement(db: Session, movement_id: int, user_id: int, update_data: MovementUpdate) -> Movement:
+    def update_movement(db: Session, movement_id: int, current_user: User, update_data: MovementUpdate) -> Movement:
         """Actualizar movimiento"""
-        movement = MovementService.get_movement(db, movement_id, user_id)
+        movement = MovementService.get_movement(db, movement_id, current_user)
         
         update_dict = update_data.dict(exclude_unset=True)
         for field, value in update_dict.items():
@@ -51,19 +59,31 @@ class MovementService:
         return movement
     
     @staticmethod
-    def delete_movement(db: Session, movement_id: int, user_id: int) -> bool:
+    def delete_movement(db: Session, movement_id: int, current_user: User) -> bool:
         """Eliminar movimiento"""
-        movement = MovementService.get_movement(db, movement_id, user_id)
+        movement = MovementService.get_movement(db, movement_id, current_user)
         db.delete(movement)
         db.commit()
         return True
     
     @staticmethod
-    def get_user_movements(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[Movement]:
-        """Obtener movimientos del usuario"""
-        return db.query(Movement).filter(
-            Movement.user_id == user_id
-        ).offset(skip).limit(limit).all()
+    def get_accessible_movements(
+        db: Session,
+        current_user: User,
+        skip: int = 0,
+        limit: int = 100,
+        target_user_id: Optional[int] = None,
+    ) -> List[Movement]:
+        """Obtener movimientos visibles para el usuario"""
+        query = db.query(Movement)
+
+        if MovementService._is_admin(current_user):
+            if target_user_id is not None:
+                query = query.filter(Movement.user_id == target_user_id)
+        else:
+            query = query.filter(Movement.user_id == current_user.id)
+
+        return query.order_by(Movement.fecha.desc()).offset(skip).limit(limit).all()
     
     @staticmethod
     def get_movements_by_obra(db: Session, obra_id: int, user_id: int) -> List[Movement]:
@@ -110,7 +130,7 @@ class MovementService:
         }
     
     @staticmethod
-    def calculate_dashboard_summary(db: Session, user_id: int) -> Dict[str, Any]:
+    def calculate_dashboard_summary(db: Session, current_user: User) -> Dict[str, Any]:
         """Calcular resumen del dashboard"""
         now = datetime.utcnow()
         
@@ -118,21 +138,29 @@ class MovementService:
         first_day_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         last_day_month = (first_day_month + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
         
-        movements_month = db.query(Movement).filter(
-            Movement.user_id == user_id,
+        month_query = db.query(Movement).filter(
             Movement.fecha >= first_day_month,
             Movement.fecha <= last_day_month
-        ).all()
+        )
+
+        if not MovementService._is_admin(current_user):
+            month_query = month_query.filter(Movement.user_id == current_user.id)
+
+        movements_month = month_query.all()
         
         # Este año
         first_day_year = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         last_day_year = now.replace(month=12, day=31, hour=23, minute=59, second=59, microsecond=999999)
         
-        movements_year = db.query(Movement).filter(
-            Movement.user_id == user_id,
+        year_query = db.query(Movement).filter(
             Movement.fecha >= first_day_year,
             Movement.fecha <= last_day_year
-        ).all()
+        )
+
+        if not MovementService._is_admin(current_user):
+            year_query = year_query.filter(Movement.user_id == current_user.id)
+
+        movements_year = year_query.all()
         
         def calc_from_movements(movements):
             ingresos = sum(m.importe_total for m in movements if m.tipo.value == "ingreso")

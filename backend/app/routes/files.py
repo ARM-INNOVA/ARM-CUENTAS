@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.middleware.auth import get_current_user, require_roles
+from app.models.user import User, UserRole
 from app.models.file import File as FileModel
 from app.models.movement import Movement
 from app.schemas.file import FileResponse, ExtractedDataResponse
@@ -14,13 +16,11 @@ from typing import Optional
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
-# TODO: Agregar dependencia de autenticación
-
 @router.post("/upload", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
     movement_id: Optional[int] = None,
-    user_id: int = 1,  # TODO: Obtener del token
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.USER)),
     db: Session = Depends(get_db)
 ):
     """Subir archivo (factura)"""
@@ -44,7 +44,7 @@ async def upload_file(
     ensure_upload_dir()
     
     # Generar nombre seguro
-    safe_filename = generate_safe_filename(file.filename, user_id)
+    safe_filename = generate_safe_filename(file.filename, current_user.id)
     file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
     
     # Guardar archivo
@@ -89,7 +89,7 @@ async def upload_file(
 @router.get("/{file_id}", response_model=FileResponse)
 async def get_file(
     file_id: int,
-    user_id: int = 1,  # TODO: Obtener del token
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Obtener información de archivo"""
@@ -103,7 +103,7 @@ async def get_file(
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: int,
-    user_id: int = 1,  # TODO: Obtener del token
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Descargar archivo original"""
@@ -122,7 +122,7 @@ async def download_file(
 @router.post("/{file_id}/extract", response_model=ExtractedDataResponse)
 async def extract_file_data(
     file_id: int,
-    user_id: int = 1,  # TODO: Obtener del token
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.USER)),
     db: Session = Depends(get_db)
 ):
     """Extraer datos de archivo"""

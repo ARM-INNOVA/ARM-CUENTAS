@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.middleware.auth import get_current_user, require_roles
+from app.models.user import User, UserRole
 from app.models.provider import Provider
 from app.schemas.provider import ProviderCreate, ProviderUpdate, ProviderResponse
 from app.services.provider_service import ProviderService
@@ -8,11 +10,10 @@ from typing import List, Optional
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
-# TODO: Agregar dependencia de autenticación
-
 @router.post("/", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
 async def create_provider(
     provider: ProviderCreate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.USER)),
     db: Session = Depends(get_db)
 ):
     """Crear nuevo proveedor/cliente"""
@@ -22,6 +23,7 @@ async def create_provider(
 @router.get("/{provider_id}", response_model=ProviderResponse)
 async def get_provider(
     provider_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Obtener proveedor"""
@@ -34,6 +36,7 @@ async def get_provider(
 async def list_providers(
     tipo: Optional[str] = Query(None),
     activos_only: bool = True,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Listar proveedores/clientes"""
@@ -43,6 +46,7 @@ async def list_providers(
 @router.get("/search/{nombre}", response_model=List[ProviderResponse])
 async def search_providers(
     nombre: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Buscar proveedores por nombre"""
@@ -53,6 +57,7 @@ async def search_providers(
 async def update_provider(
     provider_id: int,
     provider_update: ProviderUpdate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.USER)),
     db: Session = Depends(get_db)
 ):
     """Actualizar proveedor"""
@@ -64,6 +69,7 @@ async def update_provider(
 @router.delete("/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_provider(
     provider_id: int,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
     """Eliminar proveedor"""
