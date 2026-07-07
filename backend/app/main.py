@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from app.config import settings, logger
 from app.database import init_db
 from app.routes import auth, movements, obras, files, categories, providers
@@ -70,7 +71,7 @@ async def health_check():
     try:
         from app.database import SessionLocal
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
         return {
             "status": "healthy",
@@ -81,11 +82,14 @@ async def health_check():
         }
     except Exception as e:
         logger.error(f"❌ Health check fallido: {e}")
-        return {
-            "status": "unhealthy",
-            "version": settings.APP_VERSION,
-            "error": str(e)
-        }, 503
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "version": settings.APP_VERSION,
+                "error": str(e)
+            }
+        )
 
 @app.get("/api/health")
 async def api_health():
