@@ -14,6 +14,10 @@ from app.config import settings
 from app.database import Base
 from app.models.user import User
 
+DEFAULT_ADMIN_EMAIL = "admin@armcuentas.app"
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "Admin123!"
+
 def create_admin():
     """Crear usuario administrador inicial"""
     
@@ -26,17 +30,35 @@ def create_admin():
     
     try:
         # Verificar si ya existe
-        existing_admin = db.query(User).filter(User.username == "admin").first()
+        existing_admin = db.query(User).filter(User.username == DEFAULT_ADMIN_USERNAME).first()
         if existing_admin:
-            print("❌ El usuario administrador ya existe")
+            updated = False
+
+            if existing_admin.email.endswith(".local"):
+                existing_admin.email = DEFAULT_ADMIN_EMAIL
+                updated = True
+
+            if existing_admin.role != "admin":
+                existing_admin.role = "admin"
+                updated = True
+
+            if not existing_admin.is_active:
+                existing_admin.is_active = True
+                updated = True
+
+            if updated:
+                db.commit()
+                print("✅ Usuario administrador existente reparado")
+            else:
+                print("ℹ️ El usuario administrador ya existe")
             return
         
         # Crear admin
         admin = User(
-            email="admin@armcuentas.local",
-            username="admin",
+            email=DEFAULT_ADMIN_EMAIL,
+            username=DEFAULT_ADMIN_USERNAME,
             full_name="Administrador",
-            hashed_password=User.hash_password("Admin123!"),
+            hashed_password=User.hash_password(DEFAULT_ADMIN_PASSWORD),
             role="admin",
             is_active=True
         )
@@ -45,9 +67,9 @@ def create_admin():
         db.commit()
         
         print("✅ Usuario administrador creado exitosamente")
-        print(f"   Username: admin")
-        print(f"   Password: Admin123!")
-        print(f"   Email: admin@armcuentas.local")
+        print(f"   Username: {DEFAULT_ADMIN_USERNAME}")
+        print(f"   Password: {DEFAULT_ADMIN_PASSWORD}")
+        print(f"   Email: {DEFAULT_ADMIN_EMAIL}")
         print("\n⚠️  IMPORTANTE: Cambia la contraseña después del primer login")
         
     except Exception as e:
