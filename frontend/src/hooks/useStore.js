@@ -1,9 +1,16 @@
 import { create } from 'zustand'
 
+const guestUser = {
+  id: 0,
+  username: 'invitado',
+  full_name: 'Acceso temporal',
+  role: 'admin',
+}
+
 export const useAuthStore = create((set) => ({
-  user: null,
+  user: guestUser,
   token: null,
-  isAuthenticated: false,
+  isAuthenticated: true,
   
   login: (user, token) => set({
     user,
@@ -12,9 +19,9 @@ export const useAuthStore = create((set) => ({
   }),
   
   logout: () => set({
-    user: null,
+    user: guestUser,
     token: null,
-    isAuthenticated: false
+    isAuthenticated: true
   }),
   
   loadFromStorage: () => {
@@ -27,7 +34,14 @@ export const useAuthStore = create((set) => ({
         user: JSON.parse(user),
         isAuthenticated: true
       })
+      return
     }
+
+    set({
+      token: null,
+      user: guestUser,
+      isAuthenticated: true
+    })
   }
 }))
 

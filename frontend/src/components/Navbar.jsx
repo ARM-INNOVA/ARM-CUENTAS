@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 
 export const Navbar = () => {
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   
   return (
     <nav className="bg-red-600 text-white shadow-lg">
@@ -16,12 +16,7 @@ export const Navbar = () => {
           
           <div className="flex items-center space-x-4">
             <span className="text-sm">{user?.full_name || user?.username}</span>
-            <button
-              onClick={logout}
-              className="px-4 py-2 bg-red-700 hover:bg-red-800 rounded text-sm transition"
-            >
-              Logout
-            </button>
+            <span className="px-4 py-2 bg-red-700 rounded text-sm">Sin login</span>
           </div>
         </div>
       </div>
