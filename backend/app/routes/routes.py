@@ -1,7 +1,7 @@
 """
 Inicialización de rutas del backend
 """
-from app.routes import auth, movements, obras, files, categories, providers
+from app.routes import auth, movements, obras, files, categories, providers, exports
 
 def include_routes(app):
     """Incluir todas las rutas en la aplicación"""
@@ -11,4 +11,5 @@ def include_routes(app):
     app.include_router(files.router)
     app.include_router(categories.router)
     app.include_router(providers.router)
+    app.include_router(exports.router)
     return app

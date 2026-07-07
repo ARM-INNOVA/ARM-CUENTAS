@@ -24,52 +24,72 @@ export const LoginPage = () => {
   }
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">ARM CUENTAS</h1>
-          <p className="text-gray-600 mt-2">Gestión de Ingresos y Gastos</p>
+    <div className="min-h-screen" style={{ display: 'grid', placeItems: 'center', padding: '20px' }}>
+      <div className="card" style={{ width: '100%', maxWidth: '1120px', display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', overflow: 'hidden' }}>
+        <div style={{ padding: '40px', background: 'linear-gradient(160deg, rgba(220,38,38,0.22), rgba(153,27,27,0.1))' }}>
+          <p className="eyebrow">ARM CUENTAS</p>
+          <h1 style={{ fontSize: 'clamp(2.4rem, 4vw, 4rem)', marginTop: '12px', marginBottom: '20px' }}>Control financiero claro para tu empresa de reformas</h1>
+          <p className="helper-text" style={{ maxWidth: '540px', fontSize: '1rem', lineHeight: 1.7 }}>
+            Registra ingresos y gastos, sube facturas, revisa datos extraídos y mantén cada obra bajo control desde un único panel.
+          </p>
+          <div className="stats-grid" style={{ marginTop: '28px', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+            <div className="card"><strong>Facturas</strong><p className="helper-text">Subida, revisión y archivo original</p></div>
+            <div className="card"><strong>Obras</strong><p className="helper-text">Presupuesto, estado y seguimiento</p></div>
+          </div>
         </div>
-        
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+        <div style={{ padding: '40px' }}>
+          <div className="stack">
+            <div>
+              <h2 className="section-title">Iniciar sesión</h2>
+              <p className="helper-text">Accede con tu usuario para ver dashboard, movimientos y facturas.</p>
+            </div>
+
+            {error && (
+              <div className="message error">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="stack">
+              <div>
+                <label className="helper-text">Usuario</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="input-field"
+                  placeholder="Tu usuario"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="helper-text">Contraseña</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field"
+                  placeholder="Tu contraseña"
+                  required
+                />
+              </div>
+              
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary"
+              >
+                {loading ? 'Iniciando sesión...' : 'Entrar en ARM CUENTAS'}
+              </button>
+            </form>
+
+            <div className="card">
+              <p className="helper-text">Consejo</p>
+              <strong>Usa el panel para subir una factura y revisarla antes de guardar el gasto o ingreso.</strong>
+            </div>
           </div>
-        )}
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-gray-700 font-semibold mb-2">Usuario</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="input-field"
-              placeholder="Tu usuario"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-gray-700 font-semibold mb-2">Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input-field"
-              placeholder="Tu contraseña"
-              required
-            />
-          </div>
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full btn-primary font-semibold disabled:opacity-50"
-          >
-            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-          </button>
-        </form>
+        </div>
       </div>
     </div>
   )

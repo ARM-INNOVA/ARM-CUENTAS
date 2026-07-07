@@ -5,12 +5,12 @@ from app.middleware.auth import get_current_user, require_roles
 from app.models.user import User, UserRole
 from app.models.file import File as FileModel
 from app.models.movement import Movement
-from app.schemas.file import FileResponse, ExtractedDataResponse
+from app.schemas.file import FileResponse, ExtractedDataResponse, FileAttachRequest, InvoiceReviewRequest
 from app.utils.files import allowed_file, sanitize_filename, generate_safe_filename, ensure_upload_dir
-from app.utils.invoice_extractor import InvoiceExtractor
+from app.services.invoice_parser import InvoiceParser
+from app.services.movement_service import MovementService
 from app.config import settings
 import os
-import shutil
 import json
 from typing import Optional
 
@@ -52,13 +52,8 @@ async def upload_file(
         f.write(contents)
     
     # Extraer datos si es PDF
-    extracted_data = None
-    if file.filename.lower().endswith('.pdf'):
-        text = InvoiceExtractor.extract_text_from_pdf(file_path)
-        extracted_data = InvoiceExtractor.extract_invoice_data(text)
-        invoice_type = InvoiceExtractor.detect_invoice_type(text)
-    else:
-        invoice_type = "gasto"
+    extracted_data = InvoiceParser.parse_file(file_path, file.content_type)
+    invoice_type = extracted_data.get("tipo_detectado", "gasto")
     
     # Crear registro de archivo
     file_record = FileModel(
@@ -70,7 +65,7 @@ async def upload_file(
         ruta=file_path,
         datos_extraidos=json.dumps(extracted_data) if extracted_data else None,
         confianza_extraccion=extracted_data.get("confianza", 0) if extracted_data else 0,
-        necesita_revision=extracted_data.get("confianza", 0) < 60 if extracted_data else True
+        necesita_revision=extracted_data.get("necesita_revision", True) if extracted_data else True
     )
     
     db.add(file_record)
@@ -83,6 +78,7 @@ async def upload_file(
         "nombre_guardado": file_record.nombre_guardado,
         "tipo_detectado": invoice_type,
         "datos_extraidos": extracted_data,
+        "texto_extraido": extracted_data.get("texto_extraido", "") if extracted_data else "",
         "necesita_revision": file_record.necesita_revision
     }
 
@@ -135,8 +131,7 @@ async def extract_file_data(
         raise HTTPException(status_code=400, detail="Solo se pueden extraer datos de PDFs")
     
     # Extraer datos
-    text = InvoiceExtractor.extract_text_from_pdf(file_record.ruta)
-    extracted_data = InvoiceExtractor.extract_invoice_data(text)
+    extracted_data = InvoiceParser.parse_file(file_record.ruta, file_record.tipo)
     
     # Actualizar registro
     file_record.datos_extraidos = json.dumps(extracted_data)
@@ -145,3 +140,46 @@ async def extract_file_data(
     db.commit()
     
     return ExtractedDataResponse(**extracted_data)
+
+
+@router.post("/{file_id}/attach", response_model=FileResponse)
+async def attach_file_to_movement(
+    file_id: int,
+    payload: FileAttachRequest,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.USER)),
+    db: Session = Depends(get_db),
+):
+    file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    movement = MovementService.get_movement(db, payload.movement_id, current_user)
+    file_record.movement_id = movement.id
+    file_record.necesita_revision = False
+    db.commit()
+    db.refresh(file_record)
+    return FileResponse.from_orm(file_record)
+
+
+@router.post("/{file_id}/review", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_movement_from_review(
+    file_id: int,
+    review_data: InvoiceReviewRequest,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.USER)),
+    db: Session = Depends(get_db),
+):
+    file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    movement = MovementService.create_movement(db, review_data, current_user.id)
+    file_record.movement_id = movement.id
+    file_record.necesita_revision = False
+    db.commit()
+    db.refresh(file_record)
+
+    return {
+        "movement_id": movement.id,
+        "file_id": file_record.id,
+        "message": "Factura revisada y movimiento guardado"
+    }

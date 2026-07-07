@@ -1,18 +1,37 @@
 import React, { useEffect, useState } from 'react'
-import { movementsService } from '../services/api'
-import { useDashboardStore } from '../hooks/useStore'
+import AppLayout from '../layouts/AppLayout'
+import { exportsService, movementsService, obrasService } from '../services/api'
+
+const downloadBlob = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.URL.revokeObjectURL(url)
+}
 
 export const DashboardPage = () => {
   const [data, setData] = useState(null)
+  const [recentMovements, setRecentMovements] = useState([])
+  const [obraCount, setObraCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await movementsService.getDashboard()
-        setData(response.data)
+        const [dashboardResponse, movementsResponse, obrasResponse] = await Promise.all([
+          movementsService.getDashboard(),
+          movementsService.list({ limit: 6 }),
+          obrasService.list(),
+        ])
+        setData(dashboardResponse.data)
+        setRecentMovements(movementsResponse.data)
+        setObraCount(obrasResponse.data.length)
       } catch (error) {
         console.error('Error fetching dashboard:', error)
+        setError('No se pudieron cargar los datos del panel')
       } finally {
         setLoading(false)
       }
@@ -20,79 +39,93 @@ export const DashboardPage = () => {
     
     fetchData()
   }, [])
+
+  const exportCurrentMonth = async (type) => {
+    const now = new Date()
+    const params = { year: now.getFullYear(), month: now.getMonth() + 1 }
+    const response = type === 'excel' ? await exportsService.excel(params) : await exportsService.csv(params)
+    downloadBlob(response.data, type === 'excel' ? 'movimientos-mes.xlsx' : 'movimientos-mes.csv')
+  }
   
   if (loading) {
-    return <div className="p-8 text-center">Cargando...</div>
+    return <AppLayout title="Dashboard" subtitle="Resumen financiero de la empresa"><div className="card">Cargando panel...</div></AppLayout>
   }
   
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-      
-      {/* Tarjetas de resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+    <AppLayout
+      title="Dashboard"
+      subtitle="Control rápido de ingresos, gastos, obras y facturas pendientes"
+      actions={
+        <>
+          <button className="btn-secondary" onClick={() => exportCurrentMonth('csv')}>Exportar CSV</button>
+          <button className="btn-primary" onClick={() => exportCurrentMonth('excel')}>Exportar Excel</button>
+        </>
+      }
+    >
+      {error ? <div className="message error">{error}</div> : null}
+
+      <section className="stats-grid">
+        <div className="card"><p className="helper-text">Ingresos del mes</p><h2 className="tag-success">{data?.mes?.ingresos?.toFixed(2) || '0.00'}€</h2></div>
+        <div className="card"><p className="helper-text">Gastos del mes</p><h2 className="tag-danger">{data?.mes?.gastos?.toFixed(2) || '0.00'}€</h2></div>
+        <div className="card"><p className="helper-text">Beneficio del mes</p><h2>{data?.mes?.beneficio?.toFixed(2) || '0.00'}€</h2></div>
+        <div className="card"><p className="helper-text">Obras activas</p><h2>{obraCount}</h2></div>
+      </section>
+
+      <section className="dashboard-grid">
         <div className="card">
-          <h3 className="text-gray-600 text-sm font-semibold">Ingresos (Mes)</h3>
-          <p className="text-2xl font-bold text-green-600 mt-2">
-            {data?.mes?.ingresos?.toFixed(2) || '0.00'}€
-          </p>
-        </div>
-        
-        <div className="card">
-          <h3 className="text-gray-600 text-sm font-semibold">Gastos (Mes)</h3>
-          <p className="text-2xl font-bold text-red-600 mt-2">
-            {data?.mes?.gastos?.toFixed(2) || '0.00'}€
-          </p>
-        </div>
-        
-        <div className="card">
-          <h3 className="text-gray-600 text-sm font-semibold">Beneficio (Mes)</h3>
-          <p className="text-2xl font-bold text-blue-600 mt-2">
-            {data?.mes?.beneficio?.toFixed(2) || '0.00'}€
-          </p>
-        </div>
-        
-        <div className="card">
-          <h3 className="text-gray-600 text-sm font-semibold">IVA Soportado</h3>
-          <p className="text-2xl font-bold mt-2">
-            {data?.mes?.iva_soportado?.toFixed(2) || '0.00'}€
-          </p>
-        </div>
-        
-        <div className="card">
-          <h3 className="text-gray-600 text-sm font-semibold">IVA Repercutido</h3>
-          <p className="text-2xl font-bold mt-2">
-            {data?.mes?.iva_repercutido?.toFixed(2) || '0.00'}€
-          </p>
-        </div>
-        
-        <div className="card">
-          <h3 className="text-gray-600 text-sm font-semibold">Diferencia IVA</h3>
-          <p className="text-2xl font-bold mt-2">
-            {data?.mes?.diferencia_iva?.toFixed(2) || '0.00'}€
-          </p>
-        </div>
-      </div>
-      
-      {/* Datos anuales */}
-      <div className="card">
-        <h2 className="text-xl font-bold mb-4">Resumen Anual</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <p className="text-gray-600">Ingresos Anuales</p>
-            <p className="text-xl font-bold">{data?.ano?.ingresos?.toFixed(2) || '0.00'}€</p>
+          <div className="split">
+            <div>
+              <h2 className="section-title">Últimos movimientos</h2>
+              <p className="helper-text">Movimientos recientes para revisión rápida.</p>
+            </div>
+            <span className="status-pill">{recentMovements.length} visibles</span>
           </div>
-          <div>
-            <p className="text-gray-600">Gastos Anuales</p>
-            <p className="text-xl font-bold">{data?.ano?.gastos?.toFixed(2) || '0.00'}€</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Beneficio Anual</p>
-            <p className="text-xl font-bold">{data?.ano?.beneficio?.toFixed(2) || '0.00'}€</p>
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Concepto</th>
+                  <th>Tipo</th>
+                  <th>Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentMovements.map((movement) => (
+                  <tr key={movement.id}>
+                    <td>{new Date(movement.fecha).toLocaleDateString('es-ES')}</td>
+                    <td>{movement.concepto}</td>
+                    <td>{movement.tipo}</td>
+                    <td>{Number(movement.importe_total).toFixed(2)}€</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
-    </div>
+
+        <div className="stack">
+          <div className="card">
+            <h2 className="section-title">Resumen anual</h2>
+            <div className="stack">
+              <div className="split"><span className="helper-text">Ingresos</span><strong>{data?.ano?.ingresos?.toFixed(2) || '0.00'}€</strong></div>
+              <div className="split"><span className="helper-text">Gastos</span><strong>{data?.ano?.gastos?.toFixed(2) || '0.00'}€</strong></div>
+              <div className="split"><span className="helper-text">Beneficio</span><strong>{data?.ano?.beneficio?.toFixed(2) || '0.00'}€</strong></div>
+            </div>
+          </div>
+          <div className="card">
+            <h2 className="section-title">IVA y revisión</h2>
+            <div className="stack">
+              <div className="split"><span className="helper-text">IVA soportado</span><strong>{data?.mes?.iva_soportado?.toFixed(2) || '0.00'}€</strong></div>
+              <div className="split"><span className="helper-text">IVA repercutido</span><strong>{data?.mes?.iva_repercutido?.toFixed(2) || '0.00'}€</strong></div>
+              <div className="split"><span className="helper-text">Diferencia</span><strong>{data?.mes?.diferencia_iva?.toFixed(2) || '0.00'}€</strong></div>
+              <div className="split"><span className="helper-text">Pendientes</span><strong>{data?.movimientos_pendientes || 0}</strong></div>
+              <div className="split"><span className="helper-text">Facturas a revisar</span><strong>{data?.facturas_pendiente_revision || 0}</strong></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </AppLayout>
   )
 }
 

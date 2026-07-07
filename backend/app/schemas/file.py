@@ -2,6 +2,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
+from app.schemas.movement import MovementCreate
+
 class FileBase(BaseModel):
     nombre_original: str
     tipo: Optional[str] = None
@@ -34,4 +36,14 @@ class ExtractedDataResponse(BaseModel):
     iva_cantidad: Optional[float] = None
     importe_total: Optional[float] = None
     concepto: Optional[str] = None
+    texto_extraido: Optional[str] = None
+    tipo_detectado: Optional[str] = None
     confianza: int = 0  # 0-100
+
+
+class FileAttachRequest(BaseModel):
+    movement_id: int
+
+
+class InvoiceReviewRequest(MovementCreate):
+    pass

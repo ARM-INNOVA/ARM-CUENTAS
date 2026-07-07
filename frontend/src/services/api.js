@@ -43,11 +43,13 @@ export const authService = {
     apiClient.post('/auth/login', { username, password }),
   register: (data) => 
     apiClient.post('/auth/register', data),
+  me: () =>
+    apiClient.get('/auth/me'),
 }
 
 export const movementsService = {
-  list: (skip = 0, limit = 100) =>
-    apiClient.get('/movements/', { params: { skip, limit } }),
+  list: (params = {}) =>
+    apiClient.get('/movements/', { params: { skip: 0, limit: 100, ...params } }),
   create: (data) =>
     apiClient.post('/movements/', data),
   get: (id) =>
@@ -73,6 +75,20 @@ export const obrasService = {
     apiClient.delete(`/obras/${id}`),
 }
 
+export const categoriesService = {
+  list: () => apiClient.get('/categories/'),
+  create: (data) => apiClient.post('/categories/', data),
+  update: (id, data) => apiClient.put(`/categories/${id}`, data),
+  delete: (id) => apiClient.delete(`/categories/${id}`),
+}
+
+export const providersService = {
+  list: (params = {}) => apiClient.get('/providers/', { params }),
+  create: (data) => apiClient.post('/providers/', data),
+  update: (id, data) => apiClient.put(`/providers/${id}`, data),
+  delete: (id) => apiClient.delete(`/providers/${id}`),
+}
+
 export const filesService = {
   upload: (file, movementId = null) => {
     const formData = new FormData()
@@ -90,6 +106,16 @@ export const filesService = {
     apiClient.get(`/files/${id}/download`, { responseType: 'blob' }),
   extract: (id) =>
     apiClient.post(`/files/${id}/extract`),
+  attach: (id, movementId) =>
+    apiClient.post(`/files/${id}/attach`, { movement_id: movementId }),
+  review: (id, data) =>
+    apiClient.post(`/files/${id}/review`, data),
+}
+
+export const exportsService = {
+  csv: (params = {}) => apiClient.get('/exports/movements.csv', { params, responseType: 'blob' }),
+  excel: (params = {}) => apiClient.get('/exports/movements.xlsx', { params, responseType: 'blob' }),
+  invoicesZip: (params) => apiClient.get('/exports/invoices.zip', { params, responseType: 'blob' }),
 }
 
 export default apiClient

@@ -4,6 +4,9 @@ import { useAuthStore } from './hooks/useStore'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import UploadInvoicePage from './pages/UploadInvoicePage'
+import MovementsPage from './pages/MovementsPage'
+import ObrasPage from './pages/ObrasPage'
+import CatalogsPage from './pages/CatalogsPage'
 import './styles/globals.css'
 
 const authDisabled = import.meta.env.VITE_AUTH_DISABLED === 'true'
@@ -46,6 +49,30 @@ export default function App() {
           element={
             <ProtectedRoute>
               <UploadInvoicePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/movements"
+          element={
+            <ProtectedRoute>
+              <MovementsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/obras"
+          element={
+            <ProtectedRoute>
+              <ObrasPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/catalogs"
+          element={
+            <ProtectedRoute>
+              <CatalogsPage />
             </ProtectedRoute>
           }
         />
