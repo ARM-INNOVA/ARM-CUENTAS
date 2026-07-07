@@ -97,31 +97,16 @@ class InvoiceParserV2:
             data["operation_dates"] = operation_dates
             data["sale_date"] = operation_dates[0]
 
-        # 6) Resumen fiscal exacto en 3 lineas:
-        #    base / "10% iva" / total.
-        summary_regex = re.compile(
-            r"(?mi)^\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*(4|10|21)%\s+(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$"
-        )
-        summary = summary_regex.search(working_text)
-        if summary is None:
-            summary = re.search(
-                r"(?mi)^\s*Base\s+imponible\s*[:]?\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*IVA\s*[:]?\s*(4|10|21)%\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*Total\s+factura\s*[:]?\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$",
-                working_text,
-            )
+        # 6) Resumen fiscal en tres lineas sin etiquetas:
+        #    162.43€ / 10% 16.24€ / 178.67€
+        summary = cls.extract_ballenoil_tax_summary(working_text)
         if summary:
-            base = cls._norm_amount(summary.group(1))
-            rate = cls._norm_amount(summary.group(2))
-            vat = cls._norm_amount(summary.group(3))
-            total = cls._norm_amount(summary.group(4))
-            data["tax_base"] = base
-            data["vat_rate"] = int(rate) if rate is not None else None
-            data["vat_amount"] = vat
-            data["total_amount"] = total
+            data.update(summary)
 
         # 7) Estado de pago.
         if re.search(r"\bPAGADO\b", working_text, re.IGNORECASE):
             data["payment_status"] = "pagado"
-            data["payment_method"] = None
+            data["payment_method"] = "Método no indicado"
 
         # 8) Validacion contable.
         cls._finalize(data)
@@ -129,7 +114,8 @@ class InvoiceParserV2:
             expected = round(float(data["tax_base"] + data["vat_amount"]), 2)
             if abs(expected - float(data["total_amount"])) <= 0.02:
                 data["needs_review"] = False
-                data["confidence"] = max(float(data.get("confidence") or 0), 0.90)
+                data["confidence"] = 0.95
+                data["warnings"] = [w for w in data.get("warnings", []) if w != "No se pudo extraer resumen fiscal Ballenoil"]
             else:
                 data["warnings"].append("Base + IVA no coincide con total")
                 data["needs_review"] = True
@@ -139,6 +125,57 @@ class InvoiceParserV2:
 
         cls._log_parser_result("ballenoil", data)
         return data
+
+    @classmethod
+    def extract_ballenoil_tax_summary(cls, text: str) -> Optional[Dict[str, Any]]:
+        lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+
+        amount_line = re.compile(r"^\s*(\d+[.,]\d{2})\s*(?:€|EUR)?\s*$", re.IGNORECASE)
+        iva_line = re.compile(r"^\s*(4|10|21)\s*%\s*(\d+[.,]\d{2})\s*(?:€|EUR)?\s*$", re.IGNORECASE)
+
+        for i in range(len(lines) - 2):
+            m_base = amount_line.match(lines[i])
+            m_iva = iva_line.match(lines[i + 1])
+            m_total = amount_line.match(lines[i + 2])
+
+            if not (m_base and m_iva and m_total):
+                continue
+
+            base = cls._norm_amount(m_base.group(1))
+            rate = int(m_iva.group(1))
+            iva = cls._norm_amount(m_iva.group(2))
+            total = cls._norm_amount(m_total.group(1))
+
+            if None in (base, iva, total):
+                continue
+
+            if abs((base + iva) - total) <= 0.02:
+                return {
+                    "tax_base": base,
+                    "vat_rate": rate,
+                    "vat_amount": iva,
+                    "total_amount": total,
+                }
+
+        # Fallback: mismo bloque fiscal, pero con etiquetas en cada linea.
+        labelled = re.search(
+            r"(?mi)^\s*base\s+imponible\s*[:]?\s*(\d+[.,]\d{2})\s*(?:€|EUR)?\s*$\s*^\s*iva\s*[:]?\s*(4|10|21)%\s*(\d+[.,]\d{2})\s*(?:€|EUR)?\s*$\s*^\s*total\s+factura\s*[:]?\s*(\d+[.,]\d{2})\s*(?:€|EUR)?\s*$",
+            text or "",
+        )
+        if labelled:
+            base = cls._norm_amount(labelled.group(1))
+            rate = int(labelled.group(2))
+            iva = cls._norm_amount(labelled.group(3))
+            total = cls._norm_amount(labelled.group(4))
+            if None not in (base, iva, total) and abs((base + iva) - total) <= 0.02:
+                return {
+                    "tax_base": base,
+                    "vat_rate": rate,
+                    "vat_amount": iva,
+                    "total_amount": total,
+                }
+
+        return None
 
     @classmethod
     def parse_bricodepot(cls, text: str) -> Dict[str, Any]:

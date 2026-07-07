@@ -4,6 +4,28 @@ from app.services.invoice_parser_v2 import InvoiceParserV2
 
 
 class InvoiceParserV2Tests(unittest.TestCase):
+    def test_ballenoil_tax_summary_from_three_lines(self):
+        text = """
+        BALLENOIL
+        1491848 31/05/2026 FRA/1000022383
+        57.18L 1.639€ 93.72€
+        52.15L 1.629€ 84.95€
+        162.43€
+        10% 16.24€
+        178.67€
+        """
+        data = InvoiceParserV2.parse_text(text)
+
+        self.assertEqual(data["tax_base"], 162.43)
+        self.assertEqual(data["vat_rate"], 10)
+        self.assertEqual(data["vat_amount"], 16.24)
+        self.assertEqual(data["total_amount"], 178.67)
+        self.assertNotEqual(data["total_amount"], 57.18)
+        self.assertNotEqual(data["total_amount"], 52.15)
+        self.assertNotEqual(data["total_amount"], 93.72)
+        self.assertNotEqual(data["total_amount"], 84.95)
+        self.assertFalse(data["needs_review"])
+
     def test_ballenoil_parser_exact_values(self):
         text = """
         BALLENOIL, S.A.
@@ -28,7 +50,7 @@ class InvoiceParserV2Tests(unittest.TestCase):
         self.assertEqual(data["vat_amount"], 16.24)
         self.assertEqual(data["total_amount"], 178.67)
         self.assertEqual(data["payment_status"], "pagado")
-        self.assertIsNone(data["payment_method"])
+        self.assertEqual(data["payment_method"], "Método no indicado")
         self.assertFalse(data["needs_review"])
 
         self.assertNotEqual(data["total_amount"], 57.18)
