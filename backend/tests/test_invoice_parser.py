@@ -34,22 +34,37 @@ class InvoiceParserProviderTests(unittest.TestCase):
         self.assertAlmostEqual(data["vat_amount"], 1.86, places=2)
         self.assertAlmostEqual(data["total_amount"], 10.74, places=2)
 
-    def test_ballenoil(self):
+    def test_ballenoil_reads_all_tax_fields(self):
         text = """
         BALLENOIL, S.A.
-        FRA/1000022383
-        Fecha factura: 31/05/2026
-        Base imponible 162,43
-        IVA 10% 16,24
-        Total factura 178,67
+        1491848 31/05/2026 FRA/1000022383
+        09/05/2026 Gasoil Excellent 57.18L 1.639€ 93.72€
+        03/05/2026 Diesel 52.15L 1.629€ 84.95€
+        162.43€
+        10% 16.24€
+        178.67€
+        PAGADO
+        Adjuntamos en la última hoja un bono de lavado
         """
         data = InvoiceParser.parse_text(text)
+        self.assertEqual(data["supplier_name"], "BALLENOIL, S.A.")
+        self.assertEqual(data["supplier_tax_id"], "A65371171")
         self.assertEqual(data["invoice_number"], "FRA/1000022383")
         self.assertEqual(data["invoice_date"], "2026-05-31")
+        self.assertEqual(data.get("operation_date"), "2026-05-09")
         self.assertEqual(data["vat_rate"], 10)
         self.assertAlmostEqual(data["tax_base"], 162.43, places=2)
         self.assertAlmostEqual(data["vat_amount"], 16.24, places=2)
         self.assertAlmostEqual(data["total_amount"], 178.67, places=2)
+        self.assertTrue(
+            data.get("payment_status") == "pagado"
+            or "Pagado" in (data.get("payment_method") or "")
+        )
+        self.assertNotEqual(data["total_amount"], 57.18)
+        self.assertNotEqual(data["total_amount"], 52.15)
+        self.assertNotEqual(data["total_amount"], 93.72)
+        self.assertNotEqual(data["total_amount"], 84.95)
+        self.assertFalse(data.get("needs_review", True))
 
     def test_obramat(self):
         text = """

@@ -215,18 +215,96 @@ class InvoiceParser:
 
     @classmethod
     def _parse_ballenoil(cls, text: str, pages: List[str]) -> Dict[str, Any]:
-        # Ballenoil: priorizar primera pagina para evitar bono de lavado de pagina 2.
-        first_page = pages[0] if pages else text
-        result = cls._parse_generic(first_page, [first_page])
+        # Ballenoil: trabajar con pagina 1 y cortar antes del texto de anexos.
+        working_text = pages[0] if pages else text
+        cut_markers = ["Adjuntamos en la última hoja", "Adjuntamos en la ultima hoja"]
+        for marker in cut_markers:
+            idx = working_text.lower().find(marker.lower())
+            if idx != -1:
+                working_text = working_text[:idx]
+                break
+
+        result = cls._parse_generic(working_text, [working_text])
         result["supplier_name"] = "BALLENOIL, S.A."
-        result["supplier_tax_id"] = cls._extract_tax_id(first_page) or result["supplier_tax_id"]
-        result["invoice_number"] = cls._extract_with_regex(first_page, [r"(FRA/\d+)", r"FACTURA\s*[:#]?\s*([A-Z0-9/-]+)"]) or result["invoice_number"]
-        result["invoice_date"] = cls._extract_date_with_label(first_page, ["fecha factura", "fecha"]) or result["invoice_date"]
-        result["vat_rate"] = cls._extract_vat_rate(first_page) or result["vat_rate"]
-        result["tax_base"] = cls._extract_amount_by_labels(first_page, ["base imponible"], avoid=["litros", "precio"]) or result["tax_base"]
-        result["vat_amount"] = cls._extract_amount_after_labels(first_page, ["iva", "cuota iva"]) or result["vat_amount"]
-        result["total_amount"] = cls._extract_amount_after_labels(first_page, ["total factura", "importe total", "total a pagar", "total"]) or result["total_amount"]
-        result["field_sources"]["total_amount"] = "Detectado en pagina 1 Ballenoil"
+        result["supplier_tax_id"] = "A65371171"
+
+        invoice_number = cls._extract_with_regex(working_text, [r"(FRA/\d+)"])
+        if invoice_number:
+            result["invoice_number"] = invoice_number
+
+        # Fecha de factura cerca del numero de factura en cabecera.
+        header_match = re.search(r"\b\d+\s+(\d{2}/\d{2}/\d{4})\s+FRA/\d+", working_text, re.IGNORECASE)
+        if header_match:
+            result["invoice_date"] = cls._normalize_date(header_match.group(1)) or result["invoice_date"]
+        else:
+            result["invoice_date"] = cls._extract_date_with_label(working_text, ["fecha factura", "fecha"]) or result["invoice_date"]
+
+        # Fechas de operacion en lineas de repostaje (usar la mas reciente).
+        operation_candidates: List[str] = []
+        fuel_tokens = ["gasoil", "diesel", "sin plomo", "excellent"]
+        for line in working_text.splitlines():
+            lowered = line.lower()
+            if not any(token in lowered for token in fuel_tokens):
+                continue
+            for raw_date in re.findall(r"\b\d{2}/\d{2}/\d{4}\b", line):
+                normalized = cls._normalize_date(raw_date)
+                if normalized:
+                    operation_candidates.append(normalized)
+
+        operation_candidates = sorted(set(d for d in operation_candidates if d != result.get("invoice_date")), reverse=True)
+        if operation_candidates:
+            result["operation_date"] = operation_candidates[0]
+            result["operation_dates"] = operation_candidates
+
+        # Bloque fiscal de 3 lineas consecutivas al final de pagina 1.
+        summary_match = re.search(
+            r"(?P<base>\d+[.,]\d{2})\s*€?\s*\n\s*(?P<rate>4|10|21)\s*%\s*(?P<iva>\d+[.,]\d{2})\s*€?\s*\n\s*(?P<total>\d+[.,]\d{2})\s*€?",
+            working_text,
+            re.IGNORECASE,
+        )
+        if summary_match is None:
+            summary_match = re.search(
+                r"(?P<base>\d+[.,]\d{2})\s*€?\s+(?P<rate>4|10|21)\s*%\s*(?P<iva>\d+[.,]\d{2})\s*€?\s+(?P<total>\d+[.,]\d{2})\s*€?",
+                working_text,
+                re.IGNORECASE,
+            )
+
+        if summary_match:
+            base = cls._normalize_amount(summary_match.group("base"), require_decimals=True)
+            rate = cls._normalize_amount(summary_match.group("rate"))
+            vat = cls._normalize_amount(summary_match.group("iva"), require_decimals=True)
+            total = cls._normalize_amount(summary_match.group("total"), require_decimals=True)
+
+            if None not in (base, rate, vat, total):
+                result["tax_base"] = round(float(base), 2)
+                result["vat_rate"] = int(round(float(rate)))
+                result["vat_amount"] = round(float(vat), 2)
+                result["total_amount"] = round(float(total), 2)
+                result["field_sources"]["tax_base"] = "Detectado en bloque fiscal Ballenoil"
+                result["field_sources"]["vat_amount"] = "Detectado en bloque fiscal Ballenoil"
+                result["field_sources"]["total_amount"] = "Detectado en bloque fiscal Ballenoil"
+
+        # Estado de pago.
+        if "PAGADO" in working_text.upper():
+            result["payment_status"] = "pagado"
+            result["payment_method"] = "Pagado - método no indicado"
+
+        # Validacion contable estricta para Ballenoil.
+        base = result.get("tax_base")
+        vat = result.get("vat_amount")
+        total = result.get("total_amount")
+        if None not in (base, vat, total):
+            expected = round(float(Decimal(str(base)) + Decimal(str(vat))), 2)
+            if abs(expected - float(total)) <= 0.02:
+                result["needs_review"] = False
+                result["confidence"] = max(float(result.get("confidence") or 0), 0.9)
+            else:
+                result["warnings"].append("Base + IVA no coincide con total")
+                result["needs_review"] = True
+        else:
+            result["warnings"].append("No se pudo extraer el resumen fiscal de Ballenoil")
+            result["needs_review"] = True
+
         return result
 
     @classmethod
