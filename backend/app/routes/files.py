@@ -9,7 +9,7 @@ from app.schemas.file import FileResponse, ExtractedDataResponse, FileAttachRequ
 from app.utils.files import allowed_file, sanitize_filename, generate_safe_filename, ensure_upload_dir
 from app.services.invoice_parser_v2 import InvoiceParser
 from app.services.movement_service import MovementService
-from app.config import settings
+from app.config import settings, logger
 import os
 import json
 from typing import Optional
@@ -53,6 +53,9 @@ async def upload_file(
     
     # Extraer datos si es PDF
     extracted_data = InvoiceParser.parse_file(file_path, file.content_type)
+    logger.info("PARSER USADO: invoice_parser_v2.py")
+    logger.info("PROVEEDOR DETECTADO: %s", extracted_data.get("supplier_name", ""))
+    logger.info("RESULTADO PARSER: %s", extracted_data)
     invoice_type = extracted_data.get("tipo_detectado", "gasto")
     confidence_percent = int(round((extracted_data.get("confidence", 0) or 0) * 100))
     

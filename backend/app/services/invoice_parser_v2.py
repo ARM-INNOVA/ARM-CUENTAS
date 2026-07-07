@@ -62,33 +62,81 @@ class InvoiceParserV2:
     @classmethod
     def parse_ballenoil(cls, text: str) -> Dict[str, Any]:
         data = cls._base_result()
+
+        # 1) Recortar texto para ignorar anexos de lavado.
+        working_text = text or ""
+        cut_marker = "Adjuntamos en la última hoja"
+        cut_idx = working_text.lower().find(cut_marker.lower())
+        if cut_idx != -1:
+            working_text = working_text[:cut_idx]
+
+        # 2) Regla fija proveedor Ballenoil.
         data["supplier_name"] = "BALLENOIL, S.A."
-        data["invoice_number"] = cls._extract_regex(text, [r"(FRA/\d+)"]) or ""
-        data["invoice_date"] = cls._extract_date_with_label(text, ["fecha factura", "fecha"]) or ""
+        data["supplier_tax_id"] = "A65371171"
 
-        # Resumen obligatorio: base imponible, importe iva y total factura.
-        summary_zone = cls._slice_from_keywords(text, ["base imponible", "importe iva", "total factura", "iva", "total"])
+        # 3) Numero de factura.
+        data["invoice_number"] = cls._extract_regex(working_text, [r"(FRA/\d+)"]) or ""
 
-        data["tax_base"] = cls._extract_amount_after_label(summary_zone, ["base imponible"]) or cls._extract_amount_after_label(summary_zone, ["base"])
-        data["vat_amount"] = cls._extract_amount_after_label(summary_zone, ["importe iva", "cuota iva", "iva"])
-        data["total_amount"] = cls._extract_amount_after_label(summary_zone, ["total factura", "importe total", "total"])
-        data["vat_rate"] = cls._extract_percentage(summary_zone, ["iva"]) or 10
+        # 4) Fecha factura desde cabecera junto a FRA.
+        invoice_header = re.search(r"\d+\s+(\d{2}/\d{2}/\d{4})\s+FRA/\d+", working_text, re.IGNORECASE)
+        if invoice_header:
+            data["invoice_date"] = cls._norm_date(invoice_header.group(1)) or ""
+        else:
+            data["invoice_date"] = cls._extract_date_with_label(working_text, ["fecha factura", "fecha"]) or ""
 
-        if data["tax_base"] is None or data["vat_amount"] is None or data["total_amount"] is None:
-            # Fallback linealizado del resumen (162.43 / 10% 16.24 / 178.67)
-            row_amounts = cls.extract_summary_line_amounts(
-                summary_zone,
-                keywords=["base imponible", "importe iva", "total factura", "iva", "total"],
+        # 5) Fechas de operacion por lineas de combustible; tomar la mas reciente.
+        fuel_pattern = re.compile(r"\b(\d{2}/\d{2}/\d{4})\b[^\n]*(Gasoil|Diesel|Sin\s+Plomo|Excellent)", re.IGNORECASE)
+        operation_dates: List[str] = []
+        for m in fuel_pattern.finditer(working_text):
+            d = cls._norm_date(m.group(1))
+            if d and d != data.get("invoice_date"):
+                operation_dates.append(d)
+        operation_dates = sorted(set(operation_dates), reverse=True)
+        if operation_dates:
+            data["operation_date"] = operation_dates[0]
+            data["operation_dates"] = operation_dates
+            data["sale_date"] = operation_dates[0]
+
+        # 6) Resumen fiscal exacto en 3 lineas:
+        #    base / "10% iva" / total.
+        summary_regex = re.compile(
+            r"(?mi)^\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*(4|10|21)%\s+(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$"
+        )
+        summary = summary_regex.search(working_text)
+        if summary is None:
+            summary = re.search(
+                r"(?mi)^\s*Base\s+imponible\s*[:]?\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*IVA\s*[:]?\s*(4|10|21)%\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$\s*^\s*Total\s+factura\s*[:]?\s*(\d+[.,]\d{2})(?:\s*(?:€|EUR))?\s*$",
+                working_text,
             )
-            if len(row_amounts) >= 3:
-                data["tax_base"] = data["tax_base"] or row_amounts[0]
-                data["vat_amount"] = data["vat_amount"] or row_amounts[1]
-                data["total_amount"] = data["total_amount"] or row_amounts[2]
+        if summary:
+            base = cls._norm_amount(summary.group(1))
+            rate = cls._norm_amount(summary.group(2))
+            vat = cls._norm_amount(summary.group(3))
+            total = cls._norm_amount(summary.group(4))
+            data["tax_base"] = base
+            data["vat_rate"] = int(rate) if rate is not None else None
+            data["vat_amount"] = vat
+            data["total_amount"] = total
 
-        if data["vat_rate"] is None and data["tax_base"] and data["vat_amount"]:
-            data["vat_rate"] = cls._calc_rate(data["tax_base"], data["vat_amount"])
+        # 7) Estado de pago.
+        if re.search(r"\bPAGADO\b", working_text, re.IGNORECASE):
+            data["payment_status"] = "pagado"
+            data["payment_method"] = None
 
+        # 8) Validacion contable.
         cls._finalize(data)
+        if data.get("tax_base") is not None and data.get("vat_amount") is not None and data.get("total_amount") is not None:
+            expected = round(float(data["tax_base"] + data["vat_amount"]), 2)
+            if abs(expected - float(data["total_amount"])) <= 0.02:
+                data["needs_review"] = False
+                data["confidence"] = max(float(data.get("confidence") or 0), 0.90)
+            else:
+                data["warnings"].append("Base + IVA no coincide con total")
+                data["needs_review"] = True
+        else:
+            data["warnings"].append("No se pudo extraer resumen fiscal Ballenoil")
+            data["needs_review"] = True
+
         cls._log_parser_result("ballenoil", data)
         return data
 
@@ -475,12 +523,15 @@ class InvoiceParserV2:
             "supplier_tax_id": "",
             "invoice_number": "",
             "invoice_date": "",
+            "operation_date": "",
+            "operation_dates": [],
             "sale_date": "",
             "tax_base": None,
             "vat_rate": None,
             "vat_amount": None,
             "total_amount": None,
-            "payment_method": "",
+            "payment_status": "",
+            "payment_method": None,
             "needs_review": True,
             "confidence": 0,
             "warnings": [],

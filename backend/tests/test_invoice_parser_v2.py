@@ -4,6 +4,42 @@ from app.services.invoice_parser_v2 import InvoiceParserV2
 
 
 class InvoiceParserV2Tests(unittest.TestCase):
+    def test_ballenoil_parser_exact_values(self):
+        text = """
+        BALLENOIL, S.A.
+        1491848 31/05/2026 FRA/1000022383
+        09/05/2026 Gasoil Excellent 57.18L 1.639€ 93.72€
+        03/05/2026 Diesel 52.15L 1.629€ 84.95€
+        162.43€
+        10% 16.24€
+        178.67€
+        PAGADO
+        Adjuntamos en la última hoja
+        """
+        data = InvoiceParserV2.parse_text(text)
+
+        self.assertEqual(data["supplier_name"], "BALLENOIL, S.A.")
+        self.assertEqual(data["supplier_tax_id"], "A65371171")
+        self.assertEqual(data["invoice_number"], "FRA/1000022383")
+        self.assertEqual(data["invoice_date"], "2026-05-31")
+        self.assertEqual(data["operation_date"], "2026-05-09")
+        self.assertEqual(data["tax_base"], 162.43)
+        self.assertEqual(data["vat_rate"], 10)
+        self.assertEqual(data["vat_amount"], 16.24)
+        self.assertEqual(data["total_amount"], 178.67)
+        self.assertEqual(data["payment_status"], "pagado")
+        self.assertIsNone(data["payment_method"])
+        self.assertFalse(data["needs_review"])
+
+        self.assertNotEqual(data["total_amount"], 57.18)
+        self.assertNotEqual(data["total_amount"], 52.15)
+        self.assertNotEqual(data["total_amount"], 93.72)
+        self.assertNotEqual(data["total_amount"], 84.95)
+        self.assertIsNotNone(data["tax_base"])
+        self.assertIsNotNone(data["vat_amount"])
+        self.assertIsNotNone(data["total_amount"])
+        self.assertIsNotNone(data["supplier_tax_id"])
+
     def test_ballenoil_does_not_use_liters_as_amounts(self):
         text = """
         BALLENOIL, S.A.
