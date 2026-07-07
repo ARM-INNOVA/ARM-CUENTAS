@@ -14,9 +14,9 @@ from app.config import settings
 from app.database import Base
 from app.models.user import User
 
-DEFAULT_ADMIN_EMAIL = "admin@armcuentas.app"
-DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "Admin123!"
+DEFAULT_ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@armcuentas.app")
+DEFAULT_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Admin123!")
 
 def create_admin():
     """Crear usuario administrador inicial"""
@@ -34,11 +34,12 @@ def create_admin():
         if existing_admin:
             updated = False
 
-            if existing_admin.email.endswith(".local"):
+            if existing_admin.email != DEFAULT_ADMIN_EMAIL:
                 existing_admin.email = DEFAULT_ADMIN_EMAIL
                 updated = True
 
-            if existing_admin.role != "admin":
+            current_role = existing_admin.role.value if hasattr(existing_admin.role, "value") else str(existing_admin.role)
+            if current_role != "admin":
                 existing_admin.role = "admin"
                 updated = True
 
@@ -46,11 +47,19 @@ def create_admin():
                 existing_admin.is_active = True
                 updated = True
 
+            if not existing_admin.verify_password(DEFAULT_ADMIN_PASSWORD):
+                existing_admin.hashed_password = User.hash_password(DEFAULT_ADMIN_PASSWORD)
+                updated = True
+
             if updated:
                 db.commit()
-                print("✅ Usuario administrador existente reparado")
+                print("✅ Usuario administrador existente sincronizado")
             else:
                 print("ℹ️ El usuario administrador ya existe")
+
+            print(f"   Username: {DEFAULT_ADMIN_USERNAME}")
+            print(f"   Password: {DEFAULT_ADMIN_PASSWORD}")
+            print(f"   Email: {DEFAULT_ADMIN_EMAIL}")
             return
         
         # Crear admin

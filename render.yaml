@@ -21,6 +21,12 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_EMAIL
+        value: admin@armcuentas.app
+      - key: ADMIN_PASSWORD
+        value: Admin123!
       - key: ENVIRONMENT
         value: production
       - key: DEBUG
