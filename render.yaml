@@ -57,4 +57,4 @@ databases:
   - name: arm-cuentas-db
     databaseName: arm_cuentas
     user: armcuentas
-    plan: starter
+    plan: basic-256mb
