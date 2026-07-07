@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ARM CUENTAS</title>
+  <desc id="desc">Icono de la aplicación ARM CUENTAS</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <path d="M160 368 224 144h64l64 224h-56l-12-48h-66l-12 48h-46Zm92-182-24 94h48l-24-94Z" fill="#fff" />
+  <path d="M336 368V144h48v184h64v40h-112Z" fill="#fecaca" />
+</svg>

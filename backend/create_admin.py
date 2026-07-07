@@ -53,6 +53,7 @@ def create_admin():
     except Exception as e:
         print(f"❌ Error creando administrador: {e}")
         db.rollback()
+        raise
     finally:
         db.close()
 
