@@ -5,6 +5,7 @@ from app.middleware.auth import get_current_user, require_roles
 from app.models.user import User, UserRole
 from app.schemas.movement import MovementCreate, MovementUpdate, MovementResponse, MovementDetailResponse
 from app.services.movement_service import MovementService
+from app.config import logger
 from typing import List, Optional
 from datetime import datetime
 
@@ -60,6 +61,8 @@ async def list_movements(
         movements = [m for m in movements if m.categoria_id == categoria_id]
     if tipo:
         movements = [m for m in movements if m.tipo.value == tipo]
+
+    logger.info("MOVEMENTS_LIST_RETURNED count=%s user_id=%s", len(movements), current_user.id)
     
     return [MovementResponse.from_orm(m) for m in movements]
 

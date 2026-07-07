@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pdfplumber
+try:
+    import fitz  # PyMuPDF
+except Exception:  # pragma: no cover - fallback when dependency is unavailable
+    fitz = None
 
 from app.config import logger
 from app.services.invoice_parser import InvoiceParser as LegacyInvoiceParser
@@ -15,12 +19,18 @@ class InvoiceParserV2:
     DATE_RE = re.compile(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{4}-\d{2}-\d{2})\b")
 
     @classmethod
+    def parse_invoice(cls, file_path: str, mime_type: Optional[str] = None) -> Dict[str, Any]:
+        return cls.parse_file(file_path, mime_type)
+
+    @classmethod
     def parse_file(cls, file_path: str, mime_type: Optional[str] = None) -> Dict[str, Any]:
         text = cls._extract_pdf_text(file_path) if Path(file_path).suffix.lower() == ".pdf" else ""
+        text = cls._normalize_extracted_text(text)
         logger.info("BALLENOIL_DEBUG text_length=%s", len(text or ""))
-        logger.info("BALLENOIL_DEBUG text_head=%s", (text or "")[:500])
-        logger.info("BALLENOIL_DEBUG text_tail=%s", (text or "")[-500:])
+        logger.info("BALLENOIL_DEBUG text_head_1000=%s", (text or "")[:1000])
+        logger.info("BALLENOIL_DEBUG text_tail_1000=%s", (text or "")[-1000:])
         if not text:
+            logger.error("INVOICE_PARSER_EMPTY_TEXT file_path=%s mime_type=%s", file_path, mime_type)
             parsed = cls.parse_text("")
             parsed["warnings"].append("No se pudo extraer texto del archivo.")
             parsed["needs_review"] = True
@@ -67,6 +77,7 @@ class InvoiceParserV2:
     @classmethod
     def parse_ballenoil(cls, text: str) -> Dict[str, Any]:
         data = cls._base_result()
+        data["extracted_text"] = (text or "")[:20000]
 
         # 1) Recortar texto para ignorar anexos de lavado.
         working_text = text or ""
@@ -111,7 +122,7 @@ class InvoiceParserV2:
         # 7) Estado de pago.
         if re.search(r"\bPAGADO\b", working_text, re.IGNORECASE):
             data["payment_status"] = "pagado"
-            data["payment_method"] = "Método no indicado"
+            data["payment_method"] = "transferencia"
 
         # 8) Validacion contable.
         cls._finalize(data)
@@ -135,8 +146,8 @@ class InvoiceParserV2:
     def extract_ballenoil_tax_summary(cls, text: str) -> Optional[Dict[str, Any]]:
         lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
 
-        amount_line = re.compile(r"^\s*(\d+[.,]\d{2})\s*(?:€|EUR)?\s*$", re.IGNORECASE)
-        iva_line = re.compile(r"^\s*(4|10|21)\s*%\s*(\d+[.,]\d{2})\s*(?:€|EUR)?\s*$", re.IGNORECASE)
+        amount_line = re.compile(r"^\s*(\d+[.,]\d{2})\s*(?:€|EUR|\?)?\s*$", re.IGNORECASE)
+        iva_line = re.compile(r"^\s*(4|10|21)\s*%\s*(\d+[.,]\d{2})\s*(?:€|EUR|\?)?\s*$", re.IGNORECASE)
 
         for i in range(len(lines) - 2):
             m_base = amount_line.match(lines[i])
@@ -322,13 +333,37 @@ class InvoiceParserV2:
     @classmethod
     def _extract_pdf_text(cls, file_path: str) -> str:
         chunks: List[str] = []
+        if fitz is not None:
+            try:
+                doc = fitz.open(file_path)
+                try:
+                    for page in doc:
+                        chunks.append(page.get_text("text") or "")
+                finally:
+                    doc.close()
+                text = "\n".join(chunks).strip()
+                if text:
+                    return text
+            except Exception as exc:
+                logger.warning("PyMuPDF extraction failed for %s: %s", file_path, exc)
+
+        chunks = []
         try:
             with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
                     chunks.append(page.extract_text() or "")
-        except Exception:
+        except Exception as exc:
+            logger.error("pdfplumber extraction failed for %s: %s", file_path, exc)
             return ""
         return "\n".join(chunks).strip()
+
+    @staticmethod
+    def _normalize_extracted_text(text: str) -> str:
+        raw = text or ""
+        # Algunos extractores sustituyen el símbolo euro por '?'.
+        raw = re.sub(r"(?<=\d)\?(?=\s|$)", "€", raw)
+        raw = raw.replace("\ufffd", "€")
+        return raw
 
     @classmethod
     def _detect_provider(cls, text: str) -> str:

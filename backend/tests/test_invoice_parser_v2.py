@@ -1,9 +1,63 @@
 import unittest
+import tempfile
+from pathlib import Path
+
+import fitz
 
 from app.services.invoice_parser_v2 import InvoiceParserV2
 
 
 class InvoiceParserV2Tests(unittest.TestCase):
+    def _create_ballenoil_pdf(self) -> str:
+        text = """
+BALLENOIL, S.A.
+1491848 31/05/2026 FRA/1000022383
+09/05/2026 Gasoil Excellent 57.18L 1.639€ 93.72€
+03/05/2026 Diesel 52.15L 1.629€ 84.95€
+162.43€
+10% 16.24€
+178.67€
+PAGADO
+""".strip()
+
+        fd, path = tempfile.mkstemp(suffix=".pdf")
+        Path(path).unlink(missing_ok=True)
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_textbox((36, 36, 560, 800), text, fontsize=11)
+        doc.save(path)
+        doc.close()
+        return path
+
+    def test_ballenoil_parser_keeps_extracted_text(self):
+        pdf_path = self._create_ballenoil_pdf()
+        try:
+            data = InvoiceParserV2.parse_invoice(pdf_path, "application/pdf")
+            self.assertTrue((data.get("extracted_text") or "").strip())
+            self.assertIn("FRA/1000022383", data.get("extracted_text") or "")
+            self.assertIn("162.43", data.get("extracted_text") or "")
+            self.assertIn("178.67", data.get("extracted_text") or "")
+        finally:
+            Path(pdf_path).unlink(missing_ok=True)
+
+    def test_ballenoil_tax_summary(self):
+        text = """
+BALLENOIL
+1491848 31/05/2026 FRA/1000022383
+57.18L 1.639€ 93.72€
+52.15L 1.629€ 84.95€
+162.43€
+10% 16.24€
+178.67€
+"""
+        data = InvoiceParserV2.parse_text(text)
+
+        self.assertEqual(data["tax_base"], 162.43)
+        self.assertEqual(data["vat_rate"], 10)
+        self.assertEqual(data["vat_amount"], 16.24)
+        self.assertEqual(data["total_amount"], 178.67)
+        self.assertFalse(data["needs_review"])
+
     def test_ballenoil_tax_summary_from_three_lines(self):
         text = """
         BALLENOIL
@@ -50,7 +104,7 @@ class InvoiceParserV2Tests(unittest.TestCase):
         self.assertEqual(data["vat_amount"], 16.24)
         self.assertEqual(data["total_amount"], 178.67)
         self.assertEqual(data["payment_status"], "pagado")
-        self.assertEqual(data["payment_method"], "Método no indicado")
+        self.assertEqual(data["payment_method"], "transferencia")
         self.assertFalse(data["needs_review"])
 
         self.assertNotEqual(data["total_amount"], 57.18)

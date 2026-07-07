@@ -54,6 +54,7 @@ export const MovementsPage = () => {
           categoriesService.list(),
           providersService.list(),
         ])
+        console.log('DEBUG /api/movements response:', movementsResponse.data)
         setMovements(movementsResponse.data)
         setObras(obrasResponse.data)
         setCategories(categoriesResponse.data)

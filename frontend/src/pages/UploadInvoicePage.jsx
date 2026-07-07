@@ -45,6 +45,12 @@ const fieldMetaLabel = {
 
 const fmtMoney = (v) => Number(v || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 
+const allowedPaymentMethods = new Set(['efectivo', 'banco', 'tarjeta', 'transferencia', 'bizum', 'otro'])
+const normalizePaymentMethod = (value) => {
+  const normalized = String(value || '').trim().toLowerCase()
+  return allowedPaymentMethods.has(normalized) ? normalized : 'transferencia'
+}
+
 const reviewStateText = (source, touched, hasValue) => {
   if (touched) return 'Introducido manualmente'
   if (!hasValue) return 'Pendiente de revisar'
@@ -140,7 +146,7 @@ export const UploadInvoicePage = () => {
         iva_porcentaje: extracted.vat_rate ?? extracted.iva_porcentaje ?? 21,
         iva_cantidad: extracted.vat_amount ?? extracted.iva_cantidad ?? 0,
         importe_total: extracted.total_amount ?? extracted.importe_total ?? 0,
-        forma_pago: extracted.payment_method || 'transferencia',
+        forma_pago: normalizePaymentMethod(extracted.payment_method),
       })
       setManualFields({})
       setMessage('Factura leída. Revisa y confirma antes de guardar.')
@@ -167,6 +173,7 @@ export const UploadInvoicePage = () => {
         iva_porcentaje: Number(review.iva_porcentaje || 0),
         iva_cantidad: Number(review.iva_cantidad || 0),
         importe_total: Number(review.importe_total || 0),
+        forma_pago: normalizePaymentMethod(review.forma_pago),
         needs_review: !!needsReview,
       })
       setMessage(needsReview ? 'Guardado como pendiente de revisión.' : 'Factura revisada y movimiento guardado correctamente.')

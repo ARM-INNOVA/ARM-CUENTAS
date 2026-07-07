@@ -52,7 +52,7 @@ async def upload_file(
         f.write(contents)
     
     # Extraer datos si es PDF
-    extracted_data = InvoiceParser.parse_file(file_path, file.content_type)
+    extracted_data = InvoiceParser.parse_invoice(file_path, file.content_type)
     logger.info("PARSER USADO: invoice_parser_v2.py")
     logger.info("PROVEEDOR DETECTADO: %s", extracted_data.get("supplier_name", ""))
     logger.info("RESULTADO PARSER: %s", extracted_data)
@@ -75,6 +75,7 @@ async def upload_file(
     db.add(file_record)
     db.commit()
     db.refresh(file_record)
+    logger.info("UPLOAD_INVOICE_CREATED file_id=%s movement_id=%s needs_review=%s", file_record.id, file_record.movement_id, file_record.necesita_revision)
     
     return {
         "file_id": file_record.id,
@@ -137,7 +138,7 @@ async def extract_file_data(
         raise HTTPException(status_code=400, detail="Solo se pueden extraer datos de PDFs")
     
     # Extraer datos
-    extracted_data = InvoiceParser.parse_file(file_record.ruta, file_record.tipo)
+    extracted_data = InvoiceParser.parse_invoice(file_record.ruta, file_record.tipo)
     
     # Actualizar registro
     file_record.datos_extraidos = json.dumps(extracted_data)
@@ -183,6 +184,7 @@ async def create_movement_from_review(
     file_record.necesita_revision = bool(review_data.needs_review)
     db.commit()
     db.refresh(file_record)
+    logger.info("CONFIRM_INVOICE_MOVEMENT_CREATED file_id=%s movement_id=%s user_id=%s", file_record.id, movement.id, current_user.id)
 
     return {
         "movement_id": movement.id,
