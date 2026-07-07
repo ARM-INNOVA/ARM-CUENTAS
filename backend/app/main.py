@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from app.config import settings, logger
 from app.database import init_db
-from app.routes import auth, movements, obras, files, categories, providers
+from app.routes import auth, movements, obras, files, categories, providers, exports
 import os
 
 # Crear directorios necesarios
@@ -41,7 +41,9 @@ app.add_middleware(
 
 logger.info(f"🌍 CORS habilitado para: {settings.ALLOWED_ORIGINS}")
 logger.info(f"🔐 Entorno: {settings.ENVIRONMENT}")
-logger.info(f"🔑 Base de datos configurada: {'✅' if 'postgresql://' in settings.DATABASE_URL else '❌'}")
+logger.info(
+    f"🔑 Base de datos configurada: {'✅' if settings.DATABASE_URL.startswith(('postgresql://', 'postgresql+psycopg2://', 'sqlite:///')) else '❌'}"
+)
 
 # Rutas API
 app.include_router(auth.router)
@@ -50,6 +52,7 @@ app.include_router(obras.router)
 app.include_router(files.router)
 app.include_router(categories.router)
 app.include_router(providers.router)
+app.include_router(exports.router)
 
 # Rutas de info
 @app.get("/")

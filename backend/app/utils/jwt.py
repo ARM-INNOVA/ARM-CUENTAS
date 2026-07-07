@@ -6,6 +6,9 @@ from app.config import settings
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Crear token JWT"""
     to_encode = data.copy()
+
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
     
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -30,8 +33,11 @@ def verify_token(token: str) -> Optional[int]:
     if payload is None:
         return None
     
-    user_id: int = payload.get("sub")
+    user_id = payload.get("sub")
     if user_id is None:
         return None
-    
-    return user_id
+
+    try:
+        return int(user_id)
+    except (TypeError, ValueError):
+        return None
