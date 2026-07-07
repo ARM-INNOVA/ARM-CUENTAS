@@ -68,6 +68,31 @@ class InvoiceParserProviderTests(unittest.TestCase):
         self.assertAlmostEqual(data["vat_amount"], 50.64, places=2)
         self.assertAlmostEqual(data["total_amount"], 291.78, places=2)
 
+    def test_obramat_total_uses_summary_not_first_line(self):
+        text = """
+        BRICOLAJE BRICOMAN, S.L.U. OBRAMAT
+        Factura 002-0005-548466
+        Producto A 1 2,70 2,70
+        Producto B 1 119,00 119,00
+        Producto C 1 155,00 155,00
+        Producto D 1 15,08 15,08
+        Tasa IVA/IGIC/IPSI   Total. SI (EUR)   Total IVA/IGIC/IPSI   Total TTI (EUR)
+        21.00               241.14            50.64                  291,78
+        EFECTIVO 300,00
+        CAMBIO 8,22
+        """
+        data = InvoiceParser.parse_text(text)
+        self.assertAlmostEqual(data["total_amount"], 291.78, places=2)
+        self.assertAlmostEqual(data["tax_base"], 241.14, places=2)
+        self.assertAlmostEqual(data["vat_amount"], 50.64, places=2)
+
+        self.assertNotEqual(data["total_amount"], 2.70)
+        self.assertNotEqual(data["total_amount"], 119.00)
+        self.assertNotEqual(data["total_amount"], 155.00)
+        self.assertNotEqual(data["total_amount"], 15.08)
+        self.assertNotEqual(data["total_amount"], 300.00)
+        self.assertNotEqual(data["total_amount"], 8.22)
+
     def test_brico_depot(self):
         text = """
         Euro Depot España S.A.U. Brico Depot

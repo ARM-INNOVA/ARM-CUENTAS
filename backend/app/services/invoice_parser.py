@@ -236,18 +236,73 @@ class InvoiceParser:
         result["invoice_number"] = cls._extract_with_regex(text, [r"(\d{3}-\d{4}-\d{6})", r"FACTURA\s*[:#]?\s*([A-Z0-9/-]+)"]) or result["invoice_number"]
         result["invoice_date"] = cls._extract_date_with_label(text, ["fecha", "fecha factura"]) or result["invoice_date"]
 
-        # Priorizar bloque resumen final de IVA/TTI.
-        summary_block = cls._extract_block(text, ["tasa iva/igic/ipsi", "total tti", "total iva"])
-        if summary_block:
-            summary_values = cls._extract_summary_values(summary_block, ["total si", "total iva", "total tti"])
-            if summary_values:
-                result["tax_base"] = summary_values["base"]
-                result["vat_amount"] = summary_values["vat"]
-                result["total_amount"] = summary_values["total"]
-                result["field_sources"]["total_amount"] = "Detectado en resumen Total TTI"
+        # OBRAMAT: usar siempre la tabla resumen inferior para totales contables.
+        # Evita tomar importes de lineas de producto, efectivo o cambio.
+        summary = cls._extract_obramat_summary(text)
+        if summary:
+            result["vat_rate"] = summary["vat_rate"]
+            result["tax_base"] = summary["tax_base"]
+            result["vat_amount"] = summary["vat_amount"]
+            result["total_amount"] = summary["total_amount"]
+            result["field_sources"]["tax_base"] = "Detectado en tabla resumen OBRAMAT"
+            result["field_sources"]["vat_amount"] = "Detectado en tabla resumen OBRAMAT"
+            result["field_sources"]["total_amount"] = "Detectado en tabla resumen OBRAMAT"
+            return result
 
-        result["vat_rate"] = cls._extract_vat_rate(summary_block or text) or result["vat_rate"]
+        # Fallback controlado: si no hay resumen, mantener parser generico pero forzar revision.
+        result["warnings"].append("No se detecto tabla resumen OBRAMAT. Revisar importes manualmente.")
         return result
+
+    @classmethod
+    def _extract_obramat_summary(cls, text: str) -> Optional[Dict[str, float]]:
+        lower = text.lower()
+        anchors = ["tasa iva/igic/ipsi", "total", "total iva", "total tti"]
+        anchor_positions = [lower.rfind(anchor) for anchor in anchors]
+        valid_positions = [pos for pos in anchor_positions if pos != -1]
+        if not valid_positions:
+            return None
+
+        start = min(valid_positions)
+        zone = text[start:]
+        lines = [line.strip() for line in zone.splitlines() if line.strip()]
+
+        amount_token = r"(?:\d{1,3}(?:[.\s]\d{3})*|\d+)[.,]\d{2}"
+        pattern = re.compile(
+            rf"(?P<vat_rate>\d{{1,2}}(?:[.,]\d{{1,2}})?%?)\s+"
+            rf"(?P<tax_base>{amount_token})\s+"
+            rf"(?P<vat_amount>{amount_token})\s+"
+            rf"(?P<total_amount>{amount_token})"
+        )
+
+        for line in lines:
+            lowered = line.lower()
+            if any(token in lowered for token in ["efectivo", "cambio", "precio", "linea"]):
+                continue
+
+            match = pattern.search(line)
+            if not match:
+                continue
+
+            vat_raw = match.group("vat_rate").replace("%", "").strip()
+            vat_rate = cls._normalize_amount(vat_raw)
+            tax_base = cls._normalize_amount(match.group("tax_base"), require_decimals=True)
+            vat_amount = cls._normalize_amount(match.group("vat_amount"), require_decimals=True)
+            total_amount = cls._normalize_amount(match.group("total_amount"), require_decimals=True)
+
+            if None in (vat_rate, tax_base, vat_amount, total_amount):
+                continue
+
+            if float(total_amount) <= float(tax_base):
+                continue
+
+            return {
+                "vat_rate": int(round(float(vat_rate))),
+                "tax_base": round(float(tax_base), 2),
+                "vat_amount": round(float(vat_amount), 2),
+                "total_amount": round(float(total_amount), 2),
+            }
+
+        return None
 
     @classmethod
     def _parse_brico_depot(cls, text: str, pages: List[str]) -> Dict[str, Any]:
