@@ -54,6 +54,7 @@ async def upload_file(
     # Extraer datos si es PDF
     extracted_data = InvoiceParser.parse_file(file_path, file.content_type)
     invoice_type = extracted_data.get("tipo_detectado", "gasto")
+    confidence_percent = int(round((extracted_data.get("confidence", 0) or 0) * 100))
     
     # Crear registro de archivo
     file_record = FileModel(
@@ -64,8 +65,8 @@ async def upload_file(
         tamaño=len(contents),
         ruta=file_path,
         datos_extraidos=json.dumps(extracted_data) if extracted_data else None,
-        confianza_extraccion=extracted_data.get("confianza", 0) if extracted_data else 0,
-        necesita_revision=extracted_data.get("necesita_revision", True) if extracted_data else True
+        confianza_extraccion=confidence_percent if extracted_data else 0,
+        necesita_revision=extracted_data.get("needs_review", True) if extracted_data else True
     )
     
     db.add(file_record)
@@ -78,7 +79,9 @@ async def upload_file(
         "nombre_guardado": file_record.nombre_guardado,
         "tipo_detectado": invoice_type,
         "datos_extraidos": extracted_data,
-        "texto_extraido": extracted_data.get("texto_extraido", "") if extracted_data else "",
+        "texto_extraido": extracted_data.get("extracted_text", "") if extracted_data else "",
+        "warnings": extracted_data.get("warnings", []) if extracted_data else [],
+        "confidence": extracted_data.get("confidence", 0) if extracted_data else 0,
         "necesita_revision": file_record.necesita_revision
     }
 
@@ -135,8 +138,8 @@ async def extract_file_data(
     
     # Actualizar registro
     file_record.datos_extraidos = json.dumps(extracted_data)
-    file_record.confianza_extraccion = extracted_data.get("confianza", 0)
-    file_record.necesita_revision = extracted_data.get("confianza", 0) < 60
+    file_record.confianza_extraccion = int(round((extracted_data.get("confidence", 0) or 0) * 100))
+    file_record.necesita_revision = extracted_data.get("needs_review", True)
     db.commit()
     
     return ExtractedDataResponse(**extracted_data)
@@ -174,7 +177,7 @@ async def create_movement_from_review(
 
     movement = MovementService.create_movement(db, review_data, current_user.id)
     file_record.movement_id = movement.id
-    file_record.necesita_revision = False
+    file_record.necesita_revision = bool(review_data.needs_review)
     db.commit()
     db.refresh(file_record)
 

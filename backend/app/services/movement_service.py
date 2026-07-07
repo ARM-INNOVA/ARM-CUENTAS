@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.movement import Movement
 from app.models.obra import Obra
 from app.models.user import User
@@ -19,8 +19,10 @@ class MovementService:
     @staticmethod
     def create_movement(db: Session, movement_create: MovementCreate, user_id: int) -> Movement:
         """Crear movimiento"""
+        payload = movement_create.model_dump() if hasattr(movement_create, "model_dump") else movement_create.dict()
+        payload.pop("needs_review", None)
         movement = Movement(
-            **movement_create.dict(),
+            **payload,
             user_id=user_id
         )
         db.add(movement)
@@ -31,7 +33,13 @@ class MovementService:
     @staticmethod
     def get_movement(db: Session, movement_id: int, current_user: User) -> Movement:
         """Obtener movimiento"""
-        query = db.query(Movement).filter(Movement.id == movement_id)
+        query = db.query(Movement).options(
+            joinedload(Movement.obra),
+            joinedload(Movement.categoria),
+            joinedload(Movement.proveedor),
+            joinedload(Movement.user),
+            joinedload(Movement.files),
+        ).filter(Movement.id == movement_id)
 
         if not MovementService._is_admin(current_user):
             query = query.filter(Movement.user_id == current_user.id)
@@ -75,7 +83,12 @@ class MovementService:
         target_user_id: Optional[int] = None,
     ) -> List[Movement]:
         """Obtener movimientos visibles para el usuario"""
-        query = db.query(Movement)
+        query = db.query(Movement).options(
+            joinedload(Movement.obra),
+            joinedload(Movement.categoria),
+            joinedload(Movement.proveedor),
+            joinedload(Movement.files),
+        )
 
         if MovementService._is_admin(current_user):
             if target_user_id is not None:

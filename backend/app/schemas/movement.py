@@ -1,8 +1,26 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, List
 from decimal import Decimal
 from enum import Enum
+
+
+class SimpleRef(BaseModel):
+    id: int
+    nombre: str
+
+    class Config:
+        from_attributes = True
+
+
+class MovementFileRef(BaseModel):
+    id: int
+    nombre_original: str
+    necesita_revision: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class MovementType(str, Enum):
     INGRESO = "ingreso"
@@ -65,13 +83,14 @@ class MovementResponse(MovementBase):
     user_id: int
     created_at: datetime
     updated_at: datetime
+    obra: Optional[SimpleRef] = None
+    categoria: Optional[SimpleRef] = None
+    proveedor: Optional[SimpleRef] = None
+    files: List[MovementFileRef] = Field(default_factory=list)
     
     class Config:
         from_attributes = True
 
+
 class MovementDetailResponse(MovementResponse):
-    obra: Optional[dict] = None
-    categoria: Optional[dict] = None
-    proveedor: Optional[dict] = None
     user: Optional[dict] = None
-    files: List[dict] = []

@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from app.schemas.movement import MovementCreate
 
@@ -27,6 +27,23 @@ class FileResponse(FileBase):
 
 class ExtractedDataResponse(BaseModel):
     """Datos extraídos de una factura"""
+    invoice_date: Optional[str] = None
+    sale_date: Optional[str] = None
+    invoice_number: Optional[str] = None
+    supplier_name: Optional[str] = None
+    supplier_tax_id: Optional[str] = None
+    tax_base: Optional[float] = None
+    vat_rate: Optional[int] = None
+    vat_amount: Optional[float] = None
+    total_amount: Optional[float] = None
+    payment_method: Optional[str] = None
+    extracted_text: Optional[str] = None
+    confidence: float = 0
+    needs_review: bool = True
+    warnings: List[str] = Field(default_factory=list)
+    field_sources: dict = Field(default_factory=dict)
+
+    # Compatibilidad con formato legado
     fecha: Optional[str] = None
     numero_factura: Optional[str] = None
     proveedor: Optional[str] = None
@@ -46,4 +63,4 @@ class FileAttachRequest(BaseModel):
 
 
 class InvoiceReviewRequest(MovementCreate):
-    pass
+    needs_review: bool = False
